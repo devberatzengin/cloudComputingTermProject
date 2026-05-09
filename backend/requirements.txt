@@ -9,3 +9,6 @@ pycryptodome
 python-jose[cryptography]
 passlib[bcrypt]
 apscheduler
+sqlalchemy
+pydantic-settings
+psycopg2-binary
