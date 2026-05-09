@@ -30,30 +30,56 @@ class GCSManager:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def list_files(self):
-        """Lists active blobs and calculates total storage including all versions."""
+    async def list_files(self, prefix=None):
+        """Lists active blobs and common prefixes (folders) in a hierarchical way."""
         try:
-            active_blobs = self.client.list_blobs(self.bucket_name, versions=False)
+            # We use delimiter to get "folders"
+            blobs = self.client.list_blobs(self.bucket_name, prefix=prefix, delimiter='/')
+            
+            # This is tricky in GCS: 
+            # - blobs contains files in the current folder
+            # - blobs.prefixes contains subfolders
+            
             file_list = []
-            for b in active_blobs:
+            
+            # First, iterate to consume the generator and populate prefixes
+            for b in blobs:
+                # If we have a prefix like "trash/", we ignore it here
+                if b.name.startswith("trash/"): continue
+                
                 file_list.append({
-                    "name": b.name,
+                    "name": b.name.replace(prefix if prefix else "", ""),
+                    "full_path": b.name,
                     "size": b.size,
                     "updated": b.updated,
                     "generation": b.generation,
-                    "is_latest": True
+                    "is_folder": False
                 })
 
+            # Get virtual folders (prefixes)
+            folder_list = []
+            for p in blobs.prefixes:
+                if p == "trash/": continue
+                folder_list.append({
+                    "name": p.replace(prefix if prefix else "", "").rstrip("/"),
+                    "full_path": p,
+                    "is_folder": True
+                })
+
+            # Calculate total size globally (including all versions and trash)
             all_blobs = self.client.list_blobs(self.bucket_name, versions=True)
             total_size = sum(b.size for b in all_blobs if b.size)
-            total_count = len(file_list)
+            
+            # Count total active files (excluding those in trash)
+            active_blobs = self.client.list_blobs(self.bucket_name, versions=False)
+            total_count = len([b for b in active_blobs if not b.name.startswith("trash/")])
             
             return {
                 "success": True,
-                "files": file_list,
+                "items": folder_list + file_list,
                 "stats": {
-                    "total_count": total_count,
-                    "total_size_bytes": total_size
+                    "total_size_bytes": total_size,
+                    "total_count": total_count
                 }
             }
         except Exception as e:
@@ -88,18 +114,47 @@ class GCSManager:
             return {"success": False, "error": str(e)}
 
     async def delete_file(self, blob_name, purge=False):
-        """Deletes a blob. If purge is True, deletes all versions."""
+        """Soft delete (move to trash) or permanent purge."""
         try:
             if purge:
-                # List all generations of the blob and delete each one
+                # Permanent delete all versions
                 blobs = self.client.list_blobs(self.bucket_name, versions=True, prefix=blob_name)
                 for b in blobs:
                     if b.name == blob_name:
                         b.delete()
             else:
-                # Regular delete (creates a delete marker in versioned buckets)
-                blob = self.bucket.blob(blob_name)
-                blob.delete()
+                # Soft delete: Rename/Move to trash/ prefix
+                source_blob = self.bucket.blob(blob_name)
+                new_name = f"trash/{blob_name}"
+                self.bucket.copy_blob(source_blob, self.bucket, new_name)
+                source_blob.delete()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def list_trash(self):
+        """Lists files in the trash prefix."""
+        try:
+            blobs = self.client.list_blobs(self.bucket_name, prefix="trash/")
+            trash_list = []
+            for b in blobs:
+                trash_list.append({
+                    "name": b.name.replace("trash/", ""),
+                    "full_path": b.name,
+                    "size": b.size,
+                    "updated": b.updated
+                })
+            return {"success": True, "files": trash_list}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    async def restore_file(self, trash_path):
+        """Restores a file from trash back to root."""
+        try:
+            source_blob = self.bucket.blob(trash_path)
+            new_name = trash_path.replace("trash/", "")
+            self.bucket.copy_blob(source_blob, self.bucket, new_name)
+            source_blob.delete()
             return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
