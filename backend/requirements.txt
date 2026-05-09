@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+motor
+google-cloud-storage
+python-dotenv
+pydantic[email]
+python-multipart
+pycryptodome
+python-jose[cryptography]
+passlib[bcrypt]
+apscheduler

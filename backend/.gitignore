@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+.idea/
+.vscode/
+gcp-key.json
+/Users/beratzengin/BulutBilişimProje/backend/gcp-key.json

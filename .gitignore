@@ -1,0 +1,22 @@
+# IDEs
+.idea/
+.vscode/
+.DS_Store
+
+# Backend
+backend/.env
+backend/gcp-key.json
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# Local key copies
+*.json
+!package.json
+!tsconfig.json
