@@ -20,3 +20,4 @@ frontend/.env.local
 *.json
 !package.json
 !tsconfig.json
+backend/app.log
