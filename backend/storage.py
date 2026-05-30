@@ -64,11 +64,16 @@ class GCSManager:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def upload_file(self, file_content, destination_blob_name, content_type=None, uploader_email=None):
+    async def upload_file(self, file_content, destination_blob_name, content_type=None, uploader_email=None, note=None):
         try:
             blob = self.bucket.blob(destination_blob_name)
+            metadata = {}
             if uploader_email:
-                blob.metadata = {"uploader": uploader_email}
+                metadata["uploader"] = uploader_email
+            if note:
+                metadata["note"] = note
+            if metadata:
+                blob.metadata = metadata
             blob.upload_from_string(file_content, content_type=content_type)
             return {"success": True, "name": destination_blob_name}
         except Exception as e:
@@ -87,11 +92,22 @@ class GCSManager:
             blobs = self.client.list_blobs(self.bucket_name, prefix=blob_name, versions=True)
             versions = []
             for b in blobs:
+                try:
+                    b.reload()
+                except Exception as re:
+                    print(f"[GCS] Reload metadata failed for {b.name}: {re}")
+                
+                uploader = "Unknown"
+                note = None
+                if b.metadata:
+                    uploader = b.metadata.get("uploader", "Unknown")
+                    note = b.metadata.get("note")
                 versions.append({
                     "generation": b.generation,
                     "updated": b.updated,
                     "size": b.size,
-                    "uploader": b.metadata.get("uploader") if b.metadata else "Unknown"
+                    "uploader": uploader,
+                    "note": note
                 })
             # Sort by update time
             versions.sort(key=lambda x: x["updated"], reverse=True)

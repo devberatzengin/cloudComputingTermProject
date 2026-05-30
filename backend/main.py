@@ -36,13 +36,16 @@ system_settings = {
 }
 
 # 3. HELPER FUNCTIONS
-async def log_activity(action: str, details: str):
+async def log_activity(action: str, details: str, note: str = ""):
     try:
-        await activity_collection.insert_one({
+        doc = {
             "action": action,
             "details": details,
             "timestamp": datetime.now(LOCAL_TZ).isoformat()
-        })
+        }
+        if note:
+            doc["note"] = note
+        await activity_collection.insert_one(doc)
     except Exception as e:
         print(f"[Log Error] {e}")
 
@@ -92,15 +95,24 @@ async def daily_backup_task():
             await asyncio.sleep(10)
 
 @app.post("/settings/backup-now")
-async def trigger_manual_backup(current_user: User = Depends(get_current_user)):
+async def trigger_manual_backup(payload: dict = {}, current_user: User = Depends(get_current_user)):
+    note = payload.get("note", "")
     now_str = datetime.now(LOCAL_TZ).isoformat()
     system_settings["last_backup_at"] = now_str
     await settings_collection.update_one({"type": "system"}, {"$set": {"last_backup_at": now_str}}, upsert=True)
     backup_res = await storage_manager.create_snapshot()
     if backup_res.get("success"):
-        await log_activity("Manual Backup", f"{backup_res['copied_count']} dosya arşivlendi. (Kullanıcı: {current_user.email})")
+        await log_activity(
+            "Manual Backup", 
+            f"{backup_res['copied_count']} dosya arşivlendi. (Kullanıcı: {current_user.email})",
+            note=note
+        )
     else:
-        await log_activity("Backup Error", f"Yedekleme hatası: {backup_res.get('error')}")
+        await log_activity(
+            "Backup Error", 
+            f"Yedekleme hatası: {backup_res.get('error')}",
+            note=note
+        )
     return {"success": True, "last_backup_at": now_str}
 
 # 5. STARTUP
@@ -152,7 +164,7 @@ async def get_files(prefix: str = Query(None), current_user: User = Depends(get_
     return result
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...), folder: str = Query(None), current_user: User = Depends(get_current_user)):
+async def upload_file(file: UploadFile = File(...), folder: str = Query(None), note: str = Query(None), current_user: User = Depends(get_current_user)):
     content = await file.read()
     destination_name = f"{folder}/{file.filename}" if folder else file.filename
     destination_name = destination_name.replace("//", "/")
@@ -161,12 +173,13 @@ async def upload_file(file: UploadFile = File(...), folder: str = Query(None), c
         file_content=content, 
         destination_blob_name=destination_name, 
         content_type=file.content_type,
-        uploader_email=current_user.email
+        uploader_email=current_user.email,
+        note=note
     )
     if not result["success"]:
         raise HTTPException(status_code=500, detail=result["error"])
     
-    await log_activity("Upload", f"{destination_name} yedeklendi. (Kullanıcı: {current_user.email})")
+    await log_activity("Upload", f"{destination_name} yedeklendi. (Kullanıcı: {current_user.email})", note=note or "")
     return result
 
 @app.get("/files/versions")
