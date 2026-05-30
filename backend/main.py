@@ -2,13 +2,14 @@ from fastapi import FastAPI, HTTPException, Query, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from storage import storage_manager
+from monitoring import monitoring_manager
 import io
 import os
 import asyncio
 from datetime import datetime, timedelta, timezone
 from motor.motor_asyncio import AsyncIOMotorClient
 
-# OpenAuth Integration Imports
+# OpenAuth service import
 from auth.api import auth_api
 from auth.core.database import engine, Base
 from auth.api.deps import get_current_user
@@ -16,7 +17,7 @@ from auth.models.user import User
 
 app = FastAPI(title="CloudGuard Pro - Integrated Backup System")
 
-# Türkiye Saati (UTC+3) Ayarı
+# Setting Turkey timezone UTC+3
 LOCAL_TZ = timezone(timedelta(hours=3))
 
 # 1. INITIALIZE DATABASES
@@ -197,6 +198,11 @@ async def get_analytics(current_user: User = Depends(get_current_user)):
     if not analytics["success"]:
         raise HTTPException(status_code=500, detail=analytics["error"])
     return analytics
+
+@app.get("/analytics/monitoring")
+async def get_monitoring(current_user: User = Depends(get_current_user)):
+    monitoring_data = await monitoring_manager.get_gcs_metrics()
+    return monitoring_data
 
 @app.delete("/files")
 async def delete_file(name: str = Query(...), purge: bool = Query(False), current_user: User = Depends(get_current_user)):

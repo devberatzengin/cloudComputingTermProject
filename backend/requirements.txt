@@ -12,3 +12,4 @@ apscheduler
 sqlalchemy
 pydantic-settings
 psycopg2-binary
+google-cloud-monitoring

@@ -48,11 +48,16 @@ class GCSManager:
             total_size = sum(b.size for b in active_blobs if b.size)
             total_count = len([b for b in active_blobs if not b.name.startswith("trash/") and not b.name.startswith("backups/")])
             
+            # Calculate total size of ALL versions (active + historical)
+            all_blobs = list(self.client.list_blobs(self.bucket_name, versions=True))
+            total_versions_size = sum(b.size for b in all_blobs if b.size)
+            
             return {
                 "success": True, 
                 "items": items,
                 "stats": {
                     "total_size_bytes": total_size,
+                    "total_versions_size_bytes": total_versions_size,
                     "total_count": total_count
                 }
             }
