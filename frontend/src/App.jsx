@@ -27,6 +27,7 @@ function App() {
   const [isGridView, setIsGridView] = useState(true); // Default to beautiful grid card views
   const [monitoringData, setMonitoringData] = useState(null);
   const [isMonitoringLoading, setIsMonitoringLoading] = useState(false);
+  const [backupNote, setBackupNote] = useState('');
 
   // Settings State
   const [settings, setSettings] = useState({
@@ -200,8 +201,13 @@ function App() {
 
   const triggerManualBackup = async () => {
     try {
-      const res = await axios.post(`${API_BASE_URL}/settings/backup-now`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+      const res = await axios.post(
+        `${API_BASE_URL}/settings/backup-now`, 
+        { note: backupNote.trim() }, 
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      );
       if (res.data.success) {
+        setBackupNote('');
         fetchSettings();
         fetchActivities();
         alert('Manuel yedekleme başarıyla tamamlandı!');
@@ -213,11 +219,14 @@ function App() {
   };
 
   const handleUpload = async (file) => {
+    const note = window.prompt(`"${file.name}" dosyasını yüklemek için bir not ekleyin (Opsiyonel):`, "");
+    if (note === null) return; // User cancelled
+    
     setIsUploading(true);
     const formData = new FormData();
     formData.append('file', file);
     try {
-      await axios.post(`${API_BASE_URL}/upload?folder=${currentPath}`, formData, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'multipart/form-data' } });
+      await axios.post(`${API_BASE_URL}/upload?folder=${currentPath}&note=${encodeURIComponent(note.trim())}`, formData, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}`, 'Content-Type': 'multipart/form-data' } });
       fetchItems(); fetchActivities();
     } catch (err) {
       console.error(err);
@@ -800,26 +809,49 @@ function App() {
                 <Lucide.Settings2 size={18} className="text-blue-500" /> Otomatik Yedekleme Ayarları
               </h3>
               <div className="space-y-5">
+                {/* Otomatik Snapshot */}
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-slate-50 dark:bg-slate-900/30 border border-slate-200/30 dark:border-slate-800/30 rounded-xl gap-4">
                   <div>
                     <p className="font-extrabold text-sm text-slate-800 dark:text-slate-200">Otomatik Snapshot</p>
                     <p className="text-xs text-slate-500 dark:text-slate-450 mt-0.5">Her gün belirlenen saatte yedek oluşturur.</p>
                   </div>
-                  <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                    <button 
-                      onClick={() => triggerManualBackup()} 
-                      className="flex-1 sm:flex-none flex items-center justify-center gap-1 py-1.5 px-3 rounded-lg border border-blue-500/30 text-blue-500 hover:bg-blue-500 hover:text-white transition-colors text-xs font-bold cursor-pointer"
-                    >
-                      <Lucide.Zap size={13} /> Şimdi Yedekle
-                    </button>
+                  <div className="w-full sm:w-auto">
                     <button 
                       onClick={() => setSettings({ ...settings, backup_enabled: !settings.backup_enabled })} 
-                      className={`flex-1 sm:flex-none py-1.5 px-4 rounded-lg font-bold text-xs text-white cursor-pointer transition-colors ${
+                      className={`w-full sm:w-auto py-1.5 px-4 rounded-lg font-bold text-xs text-white cursor-pointer transition-colors ${
                         settings.backup_enabled ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-slate-500 hover:bg-slate-650'
                       }`}
                     >
                       {settings.backup_enabled ? 'Aktif' : 'Pasif'}
                     </button>
+                  </div>
+                </div>
+
+                {/* Manuel Snapshot */}
+                <div className="flex flex-col gap-3.5 p-4 bg-slate-50 dark:bg-slate-900/30 border border-slate-200/30 dark:border-slate-800/30 rounded-xl">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                    <div>
+                      <p className="font-extrabold text-sm text-slate-800 dark:text-slate-200">Manuel Snapshot</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-450 mt-0.5">Sistemdeki dosyaların anlık arşiv yedeğini oluşturur.</p>
+                    </div>
+                    <div className="w-full sm:w-auto">
+                      <button 
+                        onClick={() => triggerManualBackup()} 
+                        className="w-full sm:w-auto flex items-center justify-center gap-1.5 py-1.5 px-4 rounded-lg bg-blue-500 hover:bg-blue-600 text-white transition-colors text-xs font-bold cursor-pointer shadow-md shadow-blue-500/10"
+                      >
+                        <Lucide.Zap size={13} /> Şimdi Yedekle
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-550 dark:text-slate-450 uppercase tracking-wider">Yedekleme Notu (Opsiyonel)</label>
+                    <input 
+                      type="text" 
+                      placeholder="Örn: v1.0 stabil sürüm, final sunum yedeği..."
+                      value={backupNote}
+                      onChange={e => setBackupNote(e.target.value)}
+                      className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-transparent text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-slate-400 dark:placeholder:text-slate-600"
+                    />
                   </div>
                 </div>
 
@@ -1111,6 +1143,11 @@ function App() {
                           {email && <span className="text-sm font-extrabold text-slate-700 dark:text-slate-200">{email}</span>}
                         </div>
                         <p className="text-sm text-slate-500 dark:text-slate-400">{cleanDetails}</p>
+                        {a.note && (
+                          <div className="mt-1 px-2.5 py-1 bg-slate-50 dark:bg-slate-900/40 border border-slate-200/50 dark:border-slate-800/40 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-400 italic inline-block">
+                            Not: {a.note}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="text-left sm:text-right border-t sm:border-t-0 border-slate-100 dark:border-slate-800/30 pt-2 sm:pt-0 w-full sm:w-auto flex sm:flex-col justify-between sm:justify-center items-center sm:items-end">
@@ -1168,6 +1205,11 @@ function App() {
                             <span>{new Date(v.updated).toLocaleString()}</span>
                           </div>
                           <p className="text-[10px] font-mono text-slate-400 dark:text-slate-550 truncate">Gen ID: {v.generation}</p>
+                          {v.note && (
+                            <p className="text-xs text-slate-500 dark:text-slate-450 font-semibold italic mt-1.5 border-t border-slate-100 dark:border-slate-800/40 pt-1">
+                              Not: {v.note}
+                            </p>
+                          )}
                         </div>
                         <button 
                           onClick={() => handleDownload(selectedFileVersions.name, v.generation)} 
